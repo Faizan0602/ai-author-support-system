@@ -51,7 +51,7 @@ export default function App() {
 
     try {
       const response = await axios.post(
-        'http://127.0.0.1:8000/api/v1/simulate-channel-query',
+        'https://ai-author-support-system-production.up.railway.app/api/v1/simulate-channel-query',
         {
           source_channel: channel,
           author_identifier: identifier,
@@ -84,7 +84,7 @@ export default function App() {
 
     try {
       const response = await axios.post(
-        'http://127.0.0.1:8000/api/v1/resolve-identity',
+        'https://ai-author-support-system-production.up.railway.app/api/v1/resolve-identity',
         {
           identifier: identityInput,
         }
