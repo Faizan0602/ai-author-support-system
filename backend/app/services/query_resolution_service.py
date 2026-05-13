@@ -224,21 +224,18 @@ class QueryResolutionService:
         """
         Determine escalation requirement.
 
-        Escalate ONLY when:
-        - confidence is low
-        - AND no KB answer exists
-        - AND no useful DB data exists
+        Escalate when:
+        - intent is unknown
+        - OR confidence is below threshold
         """
 
-        has_meaningful_data = (
-            len(retrieved_data.keys()) > 1
-        )
+        if intent == "unknown":
+            return True
 
-        return (
-            confidence < self.ESCALATION_THRESHOLD
-            and not has_kb_result
-            and not has_meaningful_data
-        )
+        if confidence < self.ESCALATION_THRESHOLD:
+            return True
+
+        return False
 
     def _fetch_context_data(
         self,
@@ -318,7 +315,7 @@ RULES:
 5. If information is unavailable, clearly say so.
 6. Use KB information if relevant.
 7. If KB contains answer, answer naturally.
-8. Do not unnecessarily escalate valid FAQ queries.
+8. Escalate unclear or low-confidence queries.
 """
 
         return await self.ai_service.generate_response(
