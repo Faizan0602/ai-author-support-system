@@ -98,6 +98,7 @@ USER QUERY:
             raw_response = await self.ai_service.generate_response(
                 prompt=prompt,
                 temperature=0.1,
+                fallback_response=self._fallback_response_json(),
             )
 
             cleaned_response = (
@@ -146,4 +147,17 @@ USER QUERY:
             intent="unknown",
             confidence=0.0,
             extracted_entities={},
+        )
+
+    def _fallback_response_json(self) -> str:
+        """
+        Safe raw JSON fallback for Gemini classification failures.
+        """
+
+        return json.dumps(
+            {
+                "intent": "unknown",
+                "confidence": 0.0,
+                "extracted_entities": {},
+            }
         )

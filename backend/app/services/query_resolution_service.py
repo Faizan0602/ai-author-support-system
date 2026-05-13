@@ -431,10 +431,51 @@ RULES:
 8. If context cannot answer, say the information is unavailable.
 """
 
+        fallback_response = (
+            self._format_knowledge_base_response(
+                context["knowledge_base"]
+            )
+            if context.get("knowledge_base")
+            else (
+                "I'm unable to generate an AI response right now. "
+                "Your request has been escalated to our support team "
+                "for further assistance."
+            )
+        )
+
         return await self.ai_service.generate_response(
             prompt=prompt.strip(),
             temperature=0.2,
+            fallback_response=fallback_response,
         )
+
+    def _format_knowledge_base_response(
+        self,
+        kb_context: str,
+    ) -> str:
+        """
+        Return a deterministic FAQ answer without spending Gemini quota.
+        """
+
+        paragraphs = [
+            paragraph.strip()
+            for paragraph in kb_context.split("\n\n")
+            if paragraph.strip()
+        ]
+
+        if not paragraphs:
+            return (
+                "I found this in our knowledge base, but couldn't "
+                "format the details clearly. Please contact support "
+                "for the exact information."
+            )
+
+        answer = paragraphs[0]
+
+        if len(answer) > 1200:
+            answer = f"{answer[:1200].rstrip()}..."
+
+        return answer
 
     def _build_escalation_response(
         self,

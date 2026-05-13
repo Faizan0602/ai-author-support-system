@@ -34,13 +34,14 @@ class GeminiService:
         prompt: str,
         temperature: float = 0.7,
         timeout: Optional[int] = 30,
+        fallback_response: Optional[str] = None,
     ) -> str:
         """
         Generate AI response from Gemini model.
         """
 
         if not prompt or not prompt.strip():
-            return "Prompt cannot be empty."
+            return fallback_response or "Prompt cannot be empty."
 
         try:
             generation_config = genai.types.GenerationConfig(
@@ -68,36 +69,26 @@ class GeminiService:
             if not hasattr(response, "text") or not response.text:
                 logger.warning("Empty response received from Gemini.")
 
-                return """
-{
-    "intent": "unknown",
-    "confidence": 0.0,
-    "extracted_entities": {}
-}
-"""
+                return fallback_response or self._service_unavailable_message()
 
             return response.text.strip()
 
         except generation_types.StopCandidateException as e:
             logger.error(f"Generation stopped: {e}")
 
-            return """
-{
-    "intent": "unknown",
-    "confidence": 0.0,
-    "extracted_entities": {}
-}
-"""
+            return fallback_response or self._service_unavailable_message()
 
-        except Exception as e:
+        except Exception:
             logger.exception("Gemini API error")
 
-            return f"""
-{{
-    "intent": "unknown",
-    "confidence": 0.0,
-    "extracted_entities": {{
-        "error": "{str(e)}"
-    }}
-}}
-"""
+            return fallback_response or self._service_unavailable_message()
+
+    def _service_unavailable_message(self) -> str:
+        """
+        Safe user-facing fallback when Gemini is unavailable.
+        """
+
+        return (
+            "I'm unable to generate an AI response right now. "
+            "Please try again shortly."
+        )
