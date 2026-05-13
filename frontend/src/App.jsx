@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import axios from 'axios';
 import {
   Play,
@@ -8,6 +8,10 @@ import {
   Info,
   UserSearch,
 } from 'lucide-react';
+
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL ||
+  'http://127.0.0.1:8000/api/v1';
 
 export default function App() {
   // =========================
@@ -51,7 +55,7 @@ export default function App() {
 
     try {
       const response = await axios.post(
-        'https://ai-author-support-system-production.up.railway.app/api/v1/simulate-channel-query',
+        `${API_BASE_URL}/simulate-channel-query`,
         {
           source_channel: channel,
           author_identifier: identifier,
@@ -84,7 +88,7 @@ export default function App() {
 
     try {
       const response = await axios.post(
-        'https://ai-author-support-system-production.up.railway.app/api/v1/resolve-identity',
+        `${API_BASE_URL}/resolve-identity`,
         {
           identifier: identityInput,
         }

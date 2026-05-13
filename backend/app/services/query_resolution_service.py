@@ -23,11 +23,8 @@ class QueryResolutionResponse(BaseModel):
     """
 
     intent: str
-
     confidence: float
-
     response: str
-
     escalation_required: bool
 
     retrieved_data: Dict[str, Any] = Field(
@@ -41,6 +38,59 @@ class QueryResolutionService:
     """
 
     ESCALATION_THRESHOLD = 0.80
+    DB_CONTEXT_KEYS = (
+        "books",
+        "royalties",
+        "add_on_services",
+    )
+    INTENT_KEYWORDS = {
+        "publication_status": (
+            "book",
+            "live",
+            "publish",
+            "published",
+            "publishing",
+            "status",
+        ),
+        "book_sales": (
+            "book",
+            "copies",
+            "sale",
+            "sales",
+            "sold",
+        ),
+        "author_copy_status": (
+            "author",
+            "copy",
+            "courier",
+            "delivery",
+            "order",
+            "ship",
+            "shipped",
+            "tracking",
+        ),
+        "royalty_query": (
+            "earning",
+            "payment",
+            "payout",
+            "royalties",
+            "royalty",
+        ),
+        "add_on_status": (
+            "add-on",
+            "addon",
+            "bestseller",
+            "distribution",
+            "package",
+            "service",
+        ),
+        "dashboard_access": (
+            "dashboard",
+            "login",
+            "password",
+            "portal",
+        ),
+    }
 
     def __init__(
         self,
@@ -80,6 +130,23 @@ class QueryResolutionService:
             retrieved_data: Dict[str, Any] = {}
 
             # =========================
+            # Knowledge Base Retrieval
+            # =========================
+
+            kb_context = (
+                self.knowledge_base.build_context(
+                    query=query
+                )
+            )
+
+            has_kb_result = bool(kb_context)
+
+            if kb_context:
+                retrieved_data[
+                    "knowledge_base"
+                ] = kb_context
+
+            # =========================
             # Fetch Author
             # =========================
 
@@ -88,6 +155,30 @@ class QueryResolutionService:
             )
 
             if not author:
+                if has_kb_result:
+                    response_text = await self._generate_response(
+                        query=query,
+                        intent=intent,
+                        context=retrieved_data,
+                    )
+
+                    await self.conversation_logger.log_conversation(
+                        author_email=author_email,
+                        user_query=query,
+                        detected_intent=intent,
+                        confidence_score=confidence,
+                        ai_response=response_text,
+                        escalation_required=False,
+                    )
+
+                    return QueryResolutionResponse(
+                        intent=intent,
+                        confidence=confidence,
+                        response=response_text,
+                        escalation_required=False,
+                        retrieved_data=retrieved_data,
+                    )
+
                 response_text = (
                     "Author account not found. "
                     "Human support escalation triggered."
@@ -123,27 +214,11 @@ class QueryResolutionService:
             )
 
             # =========================
-            # Knowledge Base Retrieval
-            # =========================
-
-            kb_context = (
-                self.knowledge_base.build_context(
-                    query=query
-                )
-            )
-
-            has_kb_result = bool(kb_context)
-
-            if kb_context:
-                retrieved_data[
-                    "knowledge_base"
-                ] = kb_context
-
-            # =========================
             # Escalation Decision
             # =========================
 
             escalation_required = self._should_escalate(
+                query=query,
                 intent=intent,
                 confidence=confidence,
                 has_kb_result=has_kb_result,
@@ -216,6 +291,7 @@ class QueryResolutionService:
 
     def _should_escalate(
         self,
+        query: str,
         intent: str,
         confidence: float,
         has_kb_result: bool,
@@ -224,18 +300,55 @@ class QueryResolutionService:
         """
         Determine escalation requirement.
 
-        Escalate when:
-        - intent is unknown
-        - OR confidence is below threshold
+        Escalate only when:
+        - no KB answer exists
+        - no DB workflow context exists
+        - classifier result has no grounded context to answer from
         """
 
-        if intent == "unknown":
-            return True
+        if has_kb_result:
+            return False
 
-        if confidence < self.ESCALATION_THRESHOLD:
-            return True
+        if (
+            self._has_db_context(retrieved_data)
+            and self._has_intent_signal(
+                query=query,
+                intent=intent,
+            )
+        ):
+            return False
 
-        return False
+        return True
+
+    def _has_db_context(
+        self,
+        retrieved_data: Dict[str, Any],
+    ) -> bool:
+        """
+        Check whether an intent-specific DB workflow supplied context.
+        """
+
+        return any(
+            key in retrieved_data
+            for key in self.DB_CONTEXT_KEYS
+        )
+
+    def _has_intent_signal(
+        self,
+        query: str,
+        intent: str,
+    ) -> bool:
+        """
+        Confirm the query text contains words related to the DB workflow.
+        """
+
+        keywords = self.INTENT_KEYWORDS.get(intent, ())
+        normalized_query = query.lower()
+
+        return any(
+            keyword in normalized_query
+            for keyword in keywords
+        )
 
     def _fetch_context_data(
         self,
@@ -315,7 +428,7 @@ RULES:
 5. If information is unavailable, clearly say so.
 6. Use KB information if relevant.
 7. If KB contains answer, answer naturally.
-8. Escalate unclear or low-confidence queries.
+8. If context cannot answer, say the information is unavailable.
 """
 
         return await self.ai_service.generate_response(

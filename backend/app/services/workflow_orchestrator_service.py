@@ -88,6 +88,45 @@ class WorkflowOrchestratorService:
             
             # Fast-fail or Escalate on Unauthorized/Unverified accounts
             if not identity_res.matched or identity_res.escalation_required:
+                kb_context = self.query_service.knowledge_base.build_context(
+                    request.user_query
+                )
+
+                if kb_context:
+                    logger.info(
+                        f"[Workflow {workflow_id}] Identity unverified, "
+                        "but KB answer found. Handling as FAQ."
+                    )
+
+                    query_res = await self.query_service.resolve_query(
+                        query=request.user_query,
+                        author_email=request.author_identifier,
+                    )
+
+                    final_formatted_response = self._apply_channel_formatting(
+                        base_response=query_res.response,
+                        channel=request.source_channel,
+                    )
+                    escalation = query_res.escalation_required
+                    status = (
+                        ProcessingStatus.ESCALATED
+                        if escalation
+                        else ProcessingStatus.SUCCESS
+                    )
+
+                    return WorkflowResponse(
+                        workflow_id=workflow_id,
+                        source_channel=request.source_channel,
+                        matched_author=identity_res.matched_author or {
+                            "provided_identifier": request.author_identifier
+                        },
+                        intent=query_res.intent,
+                        confidence=query_res.confidence,
+                        escalation_required=escalation,
+                        processing_status=status,
+                        final_response=final_formatted_response
+                    )
+
                 logger.warning(f"[Workflow {workflow_id}] Identity unverified. Escalating.")
                 return self._build_unauthorized_response(
                     workflow_id=workflow_id,
